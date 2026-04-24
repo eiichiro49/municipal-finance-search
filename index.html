@@ -123,9 +123,29 @@
   .kpi-card.warn { border-color: var(--warning); }
   .kpi-card.good { border-color: var(--success); }
   .kpi-card.bad  { border-color: var(--danger); }
-  .kpi-label { font-size: 12px; color: var(--gray-500); font-weight: 500; margin-bottom: 6px; }
+  .kpi-label { font-size: 12px; color: var(--gray-500); font-weight: 500; margin-bottom: 6px; display:flex; align-items:center; gap:4px; }
   .kpi-value { font-size: 26px; font-weight: 700; line-height: 1; }
   .kpi-cmp   { font-size: 11px; color: var(--gray-500); margin-top: 6px; }
+
+  /* ツールチップ */
+  .tip-wrap { position:relative; display:inline-flex; align-items:center; }
+  .tip-icon { cursor:pointer; color: var(--gray-300); font-size:13px; font-style:normal; user-select:none; }
+  .tip-icon:hover { color: var(--primary); }
+  .tip-box {
+    display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
+    background:#1f2937; color:white; font-size:12px; line-height:1.6; font-weight:400;
+    padding:8px 12px; border-radius:8px; width:220px; z-index:200; pointer-events:none;
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  }
+  .tip-box::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#1f2937; }
+  .tip-wrap:hover .tip-box { display:block; }
+
+  /* 用語説明カード */
+  .terms-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:12px; }
+  .term-item { background:var(--gray-50); border-radius:8px; padding:12px 14px; border-left:3px solid var(--primary); }
+  .term-name { font-size:13px; font-weight:700; color:var(--gray-800); margin-bottom:4px; }
+  .term-easy { font-size:12px; color:var(--gray-600); line-height:1.6; }
+  .term-judge { font-size:11px; color:var(--gray-500); margin-top:4px; font-style:italic; }
 
   .tabs { display: flex; border-bottom: 2px solid var(--gray-200); margin-bottom: 20px; }
   .tab-btn { padding: 10px 20px; border: none; background: none; font-size: 14px; font-weight: 600; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .2s; }
@@ -305,11 +325,44 @@ function fv(v, u) {
 }
 function fjpy(v) {
   if (v == null) return '—';
-  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(1)+'十億円';
-  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(0)+'百万円';
-  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(0)+'千円';
-  return v+'円';
+  const a = Math.abs(v);
+  if (a >= 1e12) return (v/1e12).toFixed(1)+'兆円';
+  if (a >= 1e8)  return (v/1e8).toFixed(1)+'億円';
+  if (a >= 1e4)  return Math.round(v/1e4).toLocaleString()+'万円';
+  return Math.round(v).toLocaleString()+'円';
 }
+// ===== 用語説明（中学生向け） =====
+const TERMS = {
+  '財政力指数': {
+    easy: '自治体が自分でお金を集める力を表す数字です。1.0以上なら国からの補助がなくても運営できる「豊かな自治体」。低いほど国（地方交付税）に頼っています。',
+    judge: '目安：1.0以上＝財政力豊か、0.5未満＝国への依存度が高い'
+  },
+  '経常収支比率': {
+    easy: '毎年必ずかかる費用（職員の給料・借金返済など）が、毎年の収入の何％を占めるかを表します。この数字が高いと「余裕がなくてカツカツな家計」の状態です。',
+    judge: '目安：85%以下＝余裕あり、95%以上＝かなり苦しい'
+  },
+  '実質公債費比率': {
+    easy: '借金（地方債）の返済に、毎年の収入の何％を使っているかを表します。高いと「毎月の返済が多くて手元のお金が少ない」状態です。',
+    judge: '目安：18%以上で国の管理下に入る場合あり、25%以上で借金禁止'
+  },
+  '将来負担比率': {
+    easy: '今後返さなければならない借金の総額が、年収の何倍あるかを表します。数字が大きいほど「将来への借金が積み上がっている」状態です。',
+    judge: '目安：350%以上で国の管理下になる可能性あり'
+  },
+  '実質収支': {
+    easy: '1年間の収入と支出を比べた結果です。プラスなら黒字（使わずに余ったお金）、マイナスなら赤字です。',
+    judge: 'プラスが望ましい。連続赤字は財政悪化のサイン'
+  },
+  '実質収支比率': {
+    easy: '実質収支（黒字・赤字の金額）が、年収の何％かを表します。プラスで大きいほど財政に余裕があります。',
+    judge: '目安：3〜5%が理想的とされる'
+  },
+  '標準財政規模': {
+    easy: 'その自治体が通常の状態で集められる収入の目安の金額です。人口や税収などをもとに計算されます。財政の規模感を測るものさしです。',
+    judge: '大きいほど財政規模が大きい自治体'
+  },
+};
+
 function kpiCls(name, v) {
   if (name==='財政力指数') return v>=1?'good':v>=.5?'':'warn';
   if (name==='経常収支比率') return v>=.95?'bad':v>=.85?'warn':'good';
@@ -344,13 +397,17 @@ function render(d, allYears) {
     ${['財政力指数','経常収支比率','実質公債費比率','将来負担比率','実質収支','実質収支比率'].map(name=>{
       const ind=indMap[name]; if(!ind) return '';
       const g=grpMap[name];
+      const t=TERMS[name];
       return `<div class="kpi-card ${kpiCls(name,ind.v)}">
-        <div class="kpi-label">${name}</div>
+        <div class="kpi-label">
+          ${name}
+          ${t?`<span class="tip-wrap"><i class="tip-icon">ⓘ</i><span class="tip-box">${t.easy}</span></span>`:''}
+        </div>
         <div class="kpi-value">${fv(ind.v,ind.u)}</div>
         ${g?`<div class="kpi-cmp">類似団体: ${fv(g.v,g.u)}</div>`:''}
       </div>`;
     }).join('')}
-    ${m.scale?`<div class="kpi-card"><div class="kpi-label">標準財政規模</div><div class="kpi-value" style="font-size:18px">${fjpy(m.scale*1000)}</div></div>`:''}
+    ${m.scale?`<div class="kpi-card"><div class="kpi-label">標準財政規模<span class="tip-wrap"><i class="tip-icon">ⓘ</i><span class="tip-box">${TERMS['標準財政規模'].easy}</span></span></div><div class="kpi-value" style="font-size:18px">${fjpy(m.scale*1000)}</div></div>`:''}
   </div>
 
   <div class="tabs">
@@ -379,7 +436,20 @@ function render(d, allYears) {
         <div class="chart-wrap" style="margin-top:16px"><canvas id="chart-radar"></canvas></div>
       </div>
     </div>
+
+  <!-- 用語解説 -->
+  <div class="card" style="margin-bottom:0">
+    <div class="card-title">📖 用語解説（わかりやすく説明）</div>
+    <div class="terms-grid">
+      ${Object.entries(TERMS).map(([name, t]) => `
+        <div class="term-item">
+          <div class="term-name">${name}</div>
+          <div class="term-easy">${t.easy}</div>
+          <div class="term-judge">${t.judge}</div>
+        </div>`).join('')}
+    </div>
   </div>
+  </div><!-- /tab-overview -->
 
   <!-- 歳入歳出 -->
   <div class="tab-content" id="tab-flow">
