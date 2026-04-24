@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自治体財政データ検索</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-light: #e8f0fe;
+    --success: #0ea97a;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.10), 0 4px 6px -2px rgba(0,0,0,.05);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%);
+    color: white;
+    padding: 24px 32px;
+    box-shadow: 0 2px 8px rgba(26,86,219,.3);
+  }
+  .header h1 { font-size: 22px; font-weight: 700; }
+  .header p  { font-size: 13px; opacity: .8; margin-top: 4px; }
+
+  .search-section {
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 20px 32px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .search-wrapper { position: relative; flex: 1; min-width: 240px; max-width: 420px; }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--gray-500); pointer-events: none; }
+  #search-input {
+    width: 100%;
+    padding: 10px 12px 10px 38px;
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  #search-input:focus { border-color: var(--primary); }
+
+  .ac-list {
+    position: absolute;
+    top: calc(100% + 4px); left: 0; right: 0;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+  }
+  .ac-list.open { display: block; }
+  .ac-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    justify-content: space-between;
+  }
+  .ac-item:hover, .ac-item.sel { background: var(--primary-light); color: var(--primary); }
+  .ac-pref { font-size: 12px; color: var(--gray-500); }
+
+  .year-select {
+    padding: 10px 12px;
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    background: white;
+    cursor: pointer;
+  }
+  .year-select:focus { border-color: var(--primary); }
+
+  .main { padding: 24px 32px; max-width: 1200px; margin: 0 auto; }
+
+  .empty-state { text-align: center; padding: 80px 20px; color: var(--gray-500); }
+  .empty-state .icon { font-size: 64px; margin-bottom: 16px; }
+  .empty-state h2 { font-size: 20px; color: var(--gray-700); margin-bottom: 8px; }
+
+  .muni-header {
+    background: white;
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .muni-title { font-size: 24px; font-weight: 700; }
+  .muni-sub { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: var(--primary-light); color: var(--primary); }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .kpi-card { background: white; border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); border-left: 4px solid var(--primary); }
+  .kpi-card.warn { border-color: var(--warning); }
+  .kpi-card.good { border-color: var(--success); }
+  .kpi-card.bad  { border-color: var(--danger); }
+  .kpi-label { font-size: 12px; color: var(--gray-500); font-weight: 500; margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 700; line-height: 1; }
+  .kpi-cmp   { font-size: 11px; color: var(--gray-500); margin-top: 6px; }
+
+  .tabs { display: flex; border-bottom: 2px solid var(--gray-200); margin-bottom: 20px; }
+  .tab-btn { padding: 10px 20px; border: none; background: none; font-size: 14px; font-weight: 600; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .2s; }
+  .tab-btn:hover  { color: var(--primary); }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .card { background: white; border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow); margin-bottom: 16px; }
+  .card-title { font-size: 15px; font-weight: 700; color: var(--gray-700); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-100); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl th { text-align: left; padding: 8px 12px; background: var(--gray-50); color: var(--gray-500); font-size: 11px; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid var(--gray-200); }
+  .tbl td { padding: 10px 12px; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl tr:hover td { background: var(--gray-50); }
+  .tr { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .dim { color: var(--gray-400); font-size: 11px; }
+
+  .chart-wrap  { position: relative; height: 280px; }
+  .chart-tall  { position: relative; height: 340px; }
+
+  .comment-box { padding: 14px 16px; background: var(--gray-50); border-radius: 8px; margin-bottom: 10px; border-left: 3px solid var(--primary); }
+  .comment-lbl { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+  .comment-txt { font-size: 13px; line-height: 1.7; color: var(--gray-700); white-space: pre-wrap; }
+
+  .cmp-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--gray-100); }
+  .cmp-lbl { width: 130px; font-size: 12px; color: var(--gray-600); flex-shrink: 0; }
+  .cmp-bar  { flex: 1; height: 8px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
+  .cmp-fill { height: 100%; border-radius: 4px; background: var(--primary); }
+  .cmp-fill.warn { background: var(--warning); }
+  .cmp-fill.bad  { background: var(--danger); }
+  .cmp-fill.good { background: var(--success); }
+  .cmp-val  { width: 70px; text-align: right; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .cmp-avg  { width: 70px; text-align: right; font-size: 12px; color: var(--gray-400); flex-shrink: 0; }
+
+  .flow-cat   { margin-bottom: 16px; }
+  .flow-head  { font-size: 13px; font-weight: 700; background: var(--gray-100); padding: 6px 10px; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .flow-row   { display: flex; justify-content: space-between; padding: 6px 10px; font-size: 13px; color: var(--gray-600); border-bottom: 1px solid var(--gray-100); }
+  .flow-row:last-child { border-bottom: none; }
+  .flow-amt   { font-weight: 600; color: var(--gray-800); }
+
+  .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--gray-500); gap: 10px; }
+  .spinner { width: 24px; height: 24px; border: 3px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🏛 自治体財政データ検索</h1>
+  <p>1,741自治体の財政データを検索・比較（2020〜2024年度）</p>
+</div>
+
+<div class="search-section">
+  <div class="search-wrapper">
+    <span class="search-icon">🔍</span>
+    <input id="search-input" type="text" placeholder="市区町村名を入力 例：札幌市、渋谷区…" autocomplete="off">
+    <div class="ac-list" id="ac-list"></div>
+  </div>
+  <select class="year-select" id="year-select">
+    <option value="2024">2024年度</option>
+    <option value="2023">2023年度</option>
+    <option value="2022">2022年度</option>
+    <option value="2021">2021年度</option>
+    <option value="2020">2020年度</option>
+  </select>
+</div>
+
+<div class="main">
+  <div id="empty-state" class="empty-state">
+    <div class="icon">🗾</div>
+    <h2>自治体を検索してください</h2>
+    <p>市区町村名を入力して財政情報を確認できます</p>
+  </div>
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div><span>読み込み中…</span>
+  </div>
+  <div id="result" class="hidden"></div>
+</div>
+
+<script>
+const BASE = location.pathname.replace(/\/[^/]*$/, '');
+let muniIndex = [];
+let charts = {};
+let currentCode = null;
+let currentYear = '2024';
+
+// ===== 自治体インデックス読み込み =====
+fetch(`${BASE}/data/index.json`)
+  .then(r => r.json())
+  .then(data => { muniIndex = data; })
+  .catch(() => {
+    document.getElementById('empty-state').innerHTML = `
+      <div class="icon">⚠️</div>
+      <h2>データを読み込めませんでした</h2>
+      <p>data/index.json が見つかりません。</p>`;
+  });
+
+// ===== 検索 =====
+const inp = document.getElementById('search-input');
+const acl = document.getElementById('ac-list');
+let acItems = [], acIdx = -1;
+
+inp.addEventListener('input', () => {
+  const q = inp.value.trim();
+  if (!q) { acl.classList.remove('open'); return; }
+  acItems = muniIndex.filter(m => m.name.includes(q) || m.pref.includes(q)).slice(0, 50);
+  acIdx = -1;
+  renderAC();
+});
+inp.addEventListener('keydown', e => {
+  if (!acl.classList.contains('open')) return;
+  if (e.key === 'ArrowDown') { acIdx = Math.min(acIdx+1, acItems.length-1); renderAC(); e.preventDefault(); }
+  if (e.key === 'ArrowUp')   { acIdx = Math.max(acIdx-1, 0); renderAC(); e.preventDefault(); }
+  if (e.key === 'Enter' && acIdx >= 0) { pick(acItems[acIdx]); e.preventDefault(); }
+  if (e.key === 'Escape') acl.classList.remove('open');
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search-wrapper')) acl.classList.remove('open'); });
+
+function renderAC() {
+  if (!acItems.length) { acl.classList.remove('open'); return; }
+  acl.innerHTML = acItems.map((m,i) =>
+    `<div class="ac-item${i===acIdx?' sel':''}" data-i="${i}">
+       <span>${m.name}</span><span class="ac-pref">${m.pref}</span>
+     </div>`).join('');
+  acl.classList.add('open');
+  acl.querySelectorAll('.ac-item').forEach(el =>
+    el.addEventListener('click', () => pick(acItems[+el.dataset.i])));
+}
+
+function pick(m) {
+  inp.value = m.name;
+  acl.classList.remove('open');
+  currentCode = m.code;
+  loadMuni();
+}
+
+document.getElementById('year-select').addEventListener('change', e => {
+  currentYear = e.target.value;
+  if (currentCode) loadMuni();
+});
+
+// ===== データ読み込み =====
+async function loadMuni() {
+  document.getElementById('empty-state').classList.add('hidden');
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('loading').classList.remove('hidden');
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+
+  const res = await fetch(`${BASE}/data/${currentCode}.json`);
+  const allYears = await res.json();
+  const d = allYears[currentYear];
+  if (!d) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('result').innerHTML = '<div class="card"><p>このデータは存在しません。</p></div>';
+    document.getElementById('result').classList.remove('hidden');
+    return;
+  }
+
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('result').classList.remove('hidden');
+  render(d, allYears);
+}
+
+// ===== フォーマット =====
+function fv(v, u) {
+  if (v == null) return '—';
+  if (u === '割合') return (v*100).toFixed(1)+'%';
+  if (u === '-' || u === "'-") return (+v).toFixed(2);
+  return (+v).toLocaleString();
+}
+function fjpy(v) {
+  if (v == null) return '—';
+  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(1)+'十億円';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(0)+'百万円';
+  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(0)+'千円';
+  return v+'円';
+}
+function kpiCls(name, v) {
+  if (name==='財政力指数') return v>=1?'good':v>=.5?'':'warn';
+  if (name==='経常収支比率') return v>=.95?'bad':v>=.85?'warn':'good';
+  if (name==='実質公債費比率') return v>=.25?'bad':v>=.18?'warn':'good';
+  if (name==='将来負担比率') return v!=null&&v>=3.5?'bad':v!=null&&v>=2?'warn':'good';
+  return '';
+}
+function barCls(name, v) { return kpiCls(name, v); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ===== レンダリング =====
+function render(d, allYears) {
+  const m = d.m;
+  const indMap = {}; d.ind.forEach(i => indMap[i.n] = i);
+  const grpMap = {}; (d.grp||[]).forEach(g => grpMap[g.n] = g);
+
+  const el = document.getElementById('result');
+  el.innerHTML = `
+  <div class="muni-header">
+    <div>
+      <div class="muni-title">${m.name}</div>
+      <div class="muni-sub">${m.pref} / ${currentYear}年度 / <span class="badge">${m.group||'—'}</span></div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:13px;color:#6b7280">人口</div>
+      <div style="font-size:20px;font-weight:700">${m.pop?m.pop.toLocaleString():'—'} <span style="font-size:12px;color:#6b7280">人</span></div>
+      <div style="font-size:12px;color:#6b7280">高齢化率 ${m.aging?(m.aging*100).toFixed(1)+'%':'—'}</div>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    ${['財政力指数','経常収支比率','実質公債費比率','将来負担比率','実質収支','実質収支比率'].map(name=>{
+      const ind=indMap[name]; if(!ind) return '';
+      const g=grpMap[name];
+      return `<div class="kpi-card ${kpiCls(name,ind.v)}">
+        <div class="kpi-label">${name}</div>
+        <div class="kpi-value">${fv(ind.v,ind.u)}</div>
+        ${g?`<div class="kpi-cmp">類似団体: ${fv(g.v,g.u)}</div>`:''}
+      </div>`;
+    }).join('')}
+    ${m.scale?`<div class="kpi-card"><div class="kpi-label">標準財政規模</div><div class="kpi-value" style="font-size:18px">${fjpy(m.scale*1000)}</div></div>`:''}
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="overview">📊 財政指標</button>
+    <button class="tab-btn" data-tab="flow">💰 歳入・歳出</button>
+    <button class="tab-btn" data-tab="stock">🏦 積立金・地方債</button>
+    <button class="tab-btn" data-tab="trend">📈 推移</button>
+    ${d.comments&&d.comments.length?'<button class="tab-btn" data-tab="comments">📝 コメント</button>':''}
+  </div>
+
+  <!-- 財政指標 -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">財政指標一覧</div>
+        <table class="tbl">
+          <thead><tr><th>指標名</th><th class="tr">値</th><th class="tr">類似団体平均</th></tr></thead>
+          <tbody>
+            ${d.ind.map(i=>{const g=grpMap[i.n]; return `<tr><td>${i.n}</td><td class="tr">${fv(i.v,i.u)}</td><td class="tr dim">${g?fv(g.v,g.u):'—'}</td></tr>`;}).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">類似団体との比較</div>
+        ${buildCompare(d.ind, grpMap)}
+        <div class="chart-wrap" style="margin-top:16px"><canvas id="chart-radar"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 歳入歳出 -->
+  <div class="tab-content" id="tab-flow">
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">📥 歳入構成</div>
+        <div class="chart-wrap"><canvas id="chart-rev"></canvas></div>
+        ${buildFlowRows(d.flow,'歳入')}
+      </div>
+      <div class="card">
+        <div class="card-title">📤 歳出（性質別）</div>
+        <div class="chart-wrap"><canvas id="chart-exp-s"></canvas></div>
+        ${buildFlowRows(d.flow,'歳出 (性質)')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📤 歳出（目的別）</div>
+      <div class="chart-tall"><canvas id="chart-exp-p"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 積立金・地方債 -->
+  <div class="tab-content" id="tab-stock">
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">💰 積立金現在高</div>
+        ${buildStockRows(d.stock,'積立金')}
+      </div>
+      <div class="card">
+        <div class="card-title">📋 地方債現在高</div>
+        ${buildStockRows(d.stock,'地方債')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">積立金 vs 地方債</div>
+      <div class="chart-wrap"><canvas id="chart-stock"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 推移 -->
+  <div class="tab-content" id="tab-trend">
+    <div class="card">
+      <div class="card-title">財政指標の推移（2020〜2024年度）</div>
+      <div class="chart-tall"><canvas id="chart-trend"></canvas></div>
+    </div>
+  </div>
+
+  <!-- コメント -->
+  ${d.comments&&d.comments.length?`
+  <div class="tab-content" id="tab-comments">
+    <div class="card">
+      <div class="card-title">自治体からの分析コメント</div>
+      ${d.comments.map(c=>`<div class="comment-box"><div class="comment-lbl">${esc(c.label)}</div><div class="comment-txt">${esc(c.text)}</div></div>`).join('')}
+    </div>
+  </div>`:''}
+  `;
+
+  // タブ切り替え
+  el.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      el.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+      btn.classList.add('active');
+      el.querySelector(`#tab-${btn.dataset.tab}`).classList.add('active');
+      drawCharts(btn.dataset.tab, d, allYears);
+    });
+  });
+  drawCharts('overview', d, allYears);
+}
+
+function buildCompare(inds, grpMap) {
+  return ['財政力指数','経常収支比率','実質公債費比率','将来負担比率'].map(name=>{
+    const ind = inds.find(i=>i.n===name);
+    const g = grpMap[name];
+    if (!ind||ind.v==null) return '';
+    const v = ind.v;
+    let pct=0, cls='';
+    if (name==='財政力指数') { pct=Math.min(v/1.5*100,100); cls=v>=1?'good':v>=.5?'':'warn'; }
+    if (name==='経常収支比率') { pct=Math.min(v*100,100); cls=v>=.95?'bad':v>=.85?'warn':'good'; }
+    if (name==='実質公債費比率') { pct=Math.min(v/.35*100,100); cls=v>=.25?'bad':v>=.18?'warn':'good'; }
+    if (name==='将来負担比率') { if(v==null)return ''; pct=Math.min(v/5*100,100); cls=v>=3.5?'bad':v>=2?'warn':'good'; }
+    return `<div class="cmp-row">
+      <div class="cmp-lbl">${name}</div>
+      <div class="cmp-bar"><div class="cmp-fill ${cls}" style="width:${pct}%"></div></div>
+      <div class="cmp-val">${fv(v,ind.u)}</div>
+      <div class="cmp-avg">${g?fv(g.v,g.u):'—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function buildFlowRows(flow, cat) {
+  const c = flow[cat]; if (!c) return '<p style="font-size:13px;color:#9ca3af;padding:8px">データなし</p>';
+  return Object.entries(c).map(([maj,data])=>{
+    const tot = data.t || Object.values(data.i||{}).reduce((a,b)=>a+b,0);
+    const rows = Object.entries(data.i||{}).map(([k,v])=>`<div class="flow-row"><span>${k}</span><span class="flow-amt">${fjpy(v*1000)}</span></div>`).join('');
+    return `<div class="flow-cat">
+      <div class="flow-head"><span>${maj}</span><span>${fjpy(tot*1000)}</span></div>
+      ${rows}
+    </div>`;
+  }).join('');
+}
+
+function buildStockRows(stock, cat) {
+  const c = stock[cat]; if (!c) return '<p style="font-size:13px;color:#9ca3af;padding:8px">データなし</p>';
+  let total=0, html='';
+  for (const [maj,items] of Object.entries(c)) {
+    html += `<div class="flow-head" style="margin-top:10px"><span>${maj}</span></div>`;
+    for (const [item,v] of Object.entries(items)) {
+      html += `<div class="flow-row"><span>${item}</span><span class="flow-amt">${fjpy(v*1000)}</span></div>`;
+      total += v;
+    }
+  }
+  html += `<div style="padding:10px;font-weight:700;font-size:13px;border-top:2px solid var(--gray-200);display:flex;justify-content:space-between"><span>合計</span><span>${fjpy(total*1000)}</span></div>`;
+  return html;
+}
+
+const COLORS = ['#1a56db','#0ea97a','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16'];
+
+function drawCharts(tab, d, allYears) {
+  if (tab === 'overview') drawRadar(d);
+  if (tab === 'flow') { drawDoughnut('chart-rev', d.flow, '歳入'); drawDoughnut('chart-exp-s', d.flow, '歳出 (性質)'); drawBar('chart-exp-p', d.flow, '歳出 (目的)'); }
+  if (tab === 'stock') drawStock(d.stock);
+  if (tab === 'trend') drawTrend(allYears);
+}
+
+function drawRadar(d) {
+  if (charts['radar']) return;
+  const ctx = document.getElementById('chart-radar');
+  if (!ctx) return;
+  const labels=['財政力指数','経常収支比率','実質公債費比率','将来負担比率'];
+  const norm=(name,v)=>{
+    if(v==null)return 0;
+    if(name==='財政力指数')return Math.min(v/1.5,1)*100;
+    if(name==='経常収支比率')return Math.min(v,1)*100;
+    if(name==='実質公債費比率')return Math.min(v/.35,1)*100;
+    if(name==='将来負担比率')return Math.min(v/5,1)*100;
+    return 0;
+  };
+  const im={}; d.ind.forEach(i=>im[i.n]=i.v);
+  const gm={}; (d.grp||[]).forEach(g=>gm[g.n]=g.v);
+  charts['radar'] = new Chart(ctx, {
+    type:'radar',
+    data:{ labels, datasets:[
+      {label:'本団体', data:labels.map(l=>norm(l,im[l])), backgroundColor:'rgba(26,86,219,.2)', borderColor:'#1a56db', pointBackgroundColor:'#1a56db'},
+      {label:'類似団体平均', data:labels.map(l=>norm(l,gm[l])), backgroundColor:'rgba(14,169,122,.15)', borderColor:'#0ea97a', pointBackgroundColor:'#0ea97a'},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false, scales:{r:{min:0,max:100,ticks:{display:false}}}}
+  });
+}
+
+function drawDoughnut(id, flow, cat) {
+  if (charts[id]) return;
+  const ctx = document.getElementById(id); if (!ctx) return;
+  const c = flow[cat]; if (!c) return;
+  const entries = Object.entries(c).map(([k,v])=>[k, v.t||Object.values(v.i||{}).reduce((a,b)=>a+b,0)]).filter(([,v])=>v>0);
+  charts[id] = new Chart(ctx, {
+    type:'doughnut',
+    data:{labels:entries.map(([k])=>k), datasets:[{data:entries.map(([,v])=>v), backgroundColor:COLORS, borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{position:'right',labels:{font:{size:11}}}, tooltip:{callbacks:{label:c=>`${c.label}: ${fjpy(c.raw*1000)}`}}}}
+  });
+}
+
+function drawBar(id, flow, cat) {
+  if (charts[id]) return;
+  const ctx = document.getElementById(id); if (!ctx) return;
+  const c = flow[cat]; if (!c) return;
+  const entries = Object.entries(c).map(([k,v])=>[k, v.t||Object.values(v.i||{}).reduce((a,b)=>a+b,0)]).filter(([,v])=>v>0).sort(([,a],[,b])=>b-a);
+  charts[id] = new Chart(ctx, {
+    type:'bar',
+    data:{labels:entries.map(([k])=>k), datasets:[{data:entries.map(([,v])=>v), backgroundColor:COLORS[0], borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fjpy(c.raw*1000)}}}, scales:{y:{ticks:{callback:v=>fjpy(v*1000)}}}}
+  });
+}
+
+function drawStock(stock) {
+  if (charts['stock']) return;
+  const ctx = document.getElementById('chart-stock'); if (!ctx) return;
+  const sum = obj => obj ? Object.values(obj).flatMap(m=>Object.values(m)).reduce((a,b)=>a+b,0) : 0;
+  charts['stock'] = new Chart(ctx, {
+    type:'bar',
+    data:{labels:['積立金','地方債'], datasets:[{data:[sum(stock['積立金']),sum(stock['地方債'])], backgroundColor:[COLORS[1],COLORS[3]], borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fjpy(c.raw*1000)}}}, scales:{y:{ticks:{callback:v=>fjpy(v*1000)}}}}
+  });
+}
+
+function drawTrend(allYears) {
+  if (charts['trend']) return;
+  const ctx = document.getElementById('chart-trend'); if (!ctx) return;
+  const yrs = ['2020','2021','2022','2023','2024'];
+  const targets = ['財政力指数','経常収支比率','実質公債費比率','将来負担比率'];
+  const datasets = targets.map((name,i)=>({
+    label: name,
+    data: yrs.map(y=>{ const d=allYears[y]; if(!d)return null; const ind=d.ind.find(ii=>ii.n===name); return ind&&ind.v!=null?+(ind.v*(name==='財政力指数'?1:100)).toFixed(3):null; }),
+    borderColor: COLORS[i],
+    backgroundColor: COLORS[i]+'22',
+    tension:.3,
+    pointRadius:4,
+    fill:false,
+    spanGaps:true,
+  }));
+  charts['trend'] = new Chart(ctx, {
+    type:'line',
+    data:{ labels:yrs.map(y=>y+'年度'), datasets },
+    options:{responsive:true,maintainAspectRatio:false, plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw?.toFixed(2)}`}}}, scales:{y:{ticks:{callback:v=>v.toFixed(1)}}}}
+  });
+}
+</script>
+</body>
+</html>
